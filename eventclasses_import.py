@@ -74,6 +74,9 @@ def import_mappings(routers, uid, mappings_data):
     current_data = response['result']['data']
     # print(current_data)
     # print(mappings_data)
+    # TODO: Is it evaluation or explanation ???
+    mapping_fields = ['evaluation', 'eventClassKey', 'example', 'explanation', 'regex', 'rule', 'resolution',
+                      'transform']
 
     mappings_loop = tqdm(mappings_data, desc='    Mappings', ascii=True, file=sys.stdout)
     for mapping in mappings_loop:
@@ -95,20 +98,26 @@ def import_mappings(routers, uid, mappings_data):
             # print(current_mapping)
             mapping_uid = '{}/instances/{}'.format(uid, mapping)
             # print('***{}***'.format(mapping_data.get('rule', '')))
-            # TODO: Compare to see if needed to edit
+            # TODO: resequence if needed
             params = {'evclass': uid,
                       'uid':  mapping_uid,
                       'instanceName': mapping,
                       'newName': mapping,
-                      'eventClassKey': mapping_data.get('eventClassKey', ''),
-                      'example': mapping_data.get('example', ''),
-                      'explanation': mapping_data.get('evaluation', ''),
-                      'regex': mapping_data.get('regex', ''),
-                      'rule': mapping_data.get('rule', ''),
-                      'resolution': mapping_data.get('resolution', ''),
-                      'transform': mapping_data.get('transform', ''),
-                     }
+                      }
+            for k in mapping_fields:
+                if k in mapping_data:
+                    if mapping_data[k] != current_mapping.get(k, ''):
+                        params[k] = mapping_data[k]
+                    else:
+                        params[k] = current_mapping[k]
+                else:
+                    if k in current_mapping:
+                        params[k] = current_mapping[k]
+                    else:
+                        params[k] = ''
+            print('params: {}'.format(params))
             response = eventclass_router.callMethod('editInstance', params=params)
+            print('response: {}'.format(response))
             if not response['result']['success']:
                 print(response)
                 exit()

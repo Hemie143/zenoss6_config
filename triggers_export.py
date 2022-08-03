@@ -103,3 +103,4 @@ if __name__ == '__main__':
     print('Connecting to Zenoss')
     parse_triggerlist(routers, output)
     parse_notificationlist(routers, output)
+    #TODO : Export Notification schedules

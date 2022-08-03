@@ -94,29 +94,35 @@ def import_mib_traps(routers, mib_uid, traps_data):
             current = None
         if not current:
             response = mib_router.callMethod('addTrap', uid=mib_uid, id=id, oid=trap_data['oid'],
-                                             nodetype=trap_data['nodetype'])
+                                             nodetype='notification')
             if not response['result']['success']:
                 print(response)
                 exit()
-            current = dict(access='', description='', status='')
+            current = dict(access='', description='', status='', objects=[])
         fields = ['description', 'objects', 'status']
+        fields = ['description', 'status', 'objects']
+        fields = ['description', 'status']
         # fields = ['description', 'status']
         for k in fields:
             if k not in trap_data:
                 continue
+
+            # print(trap_data)
+            # print(current)
+
             if trap_data[k] != current[k]:
 
                 print('ID: {} - Attribute: {}'.format(id, k))
                 print('Current: {}'.format(current[k]))
                 print('Data   : {}'.format(trap_data[k]))
 
+                '''
                 if k == 'objects':
                     # trap_data[k] = 'test'
                     # trap_data[k] = [unicode(x) for x in trap_data[k]]
 
                     response = mib_router.callMethod('addTrap', uid=mib_uid, id='librarySerialNumber',
-                                                     oid=trap_data['oid'],
-                                                     nodetype='object')
+                                                     oid=trap_data['oid'], nodetype='notification')
 
                     print(response)
                     exit()
@@ -133,11 +139,21 @@ def import_mib_traps(routers, mib_uid, traps_data):
                     }
 
 
-                    print('Data   : {}'.format(trap_data[k]))
+                    # print('Data   : {}'.format(trap_data[k]))
+                '''
 
 
                 trap_uid = '{}/notifications/{}'.format(mib_uid, id)
                 info_data = {'uid': trap_uid, k: trap_data[k]}
+                '''
+                info_data = {'uid': trap_uid, 'assetStripStateChange': {
+                    "description": "This is my description"
+                }}
+                # {'assetStripStateChange': {'description': 'This is my description'}, 'uid': '/zport/dmd/Mibs/Raritan/mibs/ASSETMANAGEMENT-MIB/notifications/assetStripFirmwareUpdate'}
+                {'uid': '/zport/dmd/Mibs/Raritan/mibs/ASSETMANAGEMENT-MIB/notifications/assetStripStateChange', 'description': 'The asset strip unit changed its state.'}
+                '''
+                info_data = {'uid': '/zport/dmd/Mibs/Raritan/mibs/ASSETMANAGEMENT-MIB/notifications/assetStripStateChange',
+                 'objects': ['deviceName']}
 
                 print(info_data)
 
@@ -145,8 +161,6 @@ def import_mib_traps(routers, mib_uid, traps_data):
                 if not response['result']['success']:
                     print(response)
                     exit()
-                print(response)
-                exit()
     return
 
 

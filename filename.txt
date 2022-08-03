@@ -1,2 +1,0 @@
-2021-02-19 14:44:50,707 [WARNING] - This should go in the file.
-2021-02-19 14:50:31,970 [WARNING] - This should go in the file.

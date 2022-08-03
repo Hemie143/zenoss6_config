@@ -9,6 +9,9 @@ def get_mibinfo(routers, uid):
     info_json = {}
     mib_router = routers['Mib']
     response = mib_router.callMethod('getInfo', uid=uid)
+    if not response['result']['success']:
+        print('No info collector for uid: {}'.format(uid))
+        return {}
     data = response['result']['data']
     for k in mib_fields:
         v = data.get(k, '')
@@ -21,6 +24,7 @@ def get_miboids(routers, uid):
     mib_router = routers['Mib']
     response = mib_router.callMethod('getOidMappings', uid=uid)
     if not response['result']['success']:
+        print('No OID found for uid: {}'.format(uid))
         return
     data = sorted(response['result']['data'], key=lambda i: i['name'])
     oid_fields = ['name', 'oid', 'access', 'nodetype', 'status', 'description']
@@ -41,9 +45,12 @@ def get_mibtraps(routers, uid):
     mib_router = routers['Mib']
     response = mib_router.callMethod('getTraps', uid=uid)
     if not response['result']['success']:
+        print('No trap found for uid: {}'.format(uid))
         return
     data = sorted(response['result']['data'], key=lambda i: i['name'])
-    traps_fields = ['name', 'oid', 'objects', 'nodetype', 'status', 'description']
+    # traps_fields = ['name', 'oid', 'objects', 'nodetype', 'status', 'description']
+    traps_fields = ['name', 'oid', 'nodetype', 'status', 'description']
+    # TODO: Sort objects list
     traps_json = {}
     for oid in data:
         if 'traps' not in traps_json:
@@ -85,6 +92,10 @@ def parse_mibtree(routers, output):
     mib_json = {'mibs_organizers': {}}
     for organizer in tqdm(organizers, desc='MIBs Organizers', ascii=True):
         response = mib_router.callMethod('getOrganizerTree', id=organizer)
+        # print(response)
+        if not response['result']:
+            print('getOrganizerTree response: {}'.format(response))
+            continue
         result = response['result'][0]
         org_path = '/{}'.format(result['path'])
         mib_json['mibs_organizers'][org_path] = {}
@@ -115,6 +126,8 @@ if __name__ == '__main__':
     options = parser.parse_args()
     environ = options.environ
     output = options.output
+
+    # TODO: argument to select enable/disable of objects in traps
 
     # Routers
     try:

@@ -1,8 +1,9 @@
 import zenAPI.zenApiLib
 import argparse
+import logging
 import re
-import yaml
 import sys
+import yaml
 from tqdm import tqdm
 
 # TODO: Export locks on components
@@ -40,6 +41,7 @@ def get_properties(routers, uid):
     data = sorted(response['result']['data'], key=lambda i: i['id'])
     for prop in data:
         if prop['islocal'] and prop['uid'] == uid and prop['id'] not in ['zSnmpEngineId']:
+            # TODO: Enhance the checks based on the type of value ??
             # print(prop)
             if prop['type'] == 'boolean':
                 v = bool(prop['value'])
@@ -54,10 +56,16 @@ def get_properties(routers, uid):
                 v = '<Encrypted>'
             elif prop['type'] == 'string':
                 v = str(prop['value'])
-            elif prop['type'] in ['lines', 'gcpguestlabels']:
+            elif prop['type'] in ['awsdiscoverfield', 'multilinekeyvalue', 'multilinekeypath']:
+                v = str(prop['value'])      # String ??
+            elif prop['type'] in ['lines', 'gcpguestlabels', 'awsenabledplugins', 'multilinecheckbox']:
                 v = prop['value']           # List
+            elif prop['type'] == 'multilinethreshold':
+                v = prop['value']           # dict ?
+            elif prop['type'] == 'multiconfig':
+                v = prop['value']           # dict ?
             else:
-                print('unknown type')
+                print('get_properties - Property of unknown type')
                 print(prop)
                 exit()
             # v = prop.get('valueAsString', '')
@@ -78,6 +86,10 @@ def get_groups(routers, output, full_data):
     for group in tqdm(groups, desc='Groups         ', ascii=True):
         g_uid = '/zport/dmd/Groups{}'.format(group['name'])
         response = device_router.callMethod('getInfo', uid=g_uid)
+        if not response['result']['success']:
+            logging.error('get_groups - getInfo - {} = {}'.format(group['name'], response))
+            # print('get_groups - getInfo - {} = {}'.format(group['name'], response))
+            continue
         data = response['result']['data']
         group_name = data['name']
         groups_data['groups'][group_name] = {}
@@ -141,6 +153,9 @@ def get_dcdevices(routers, uid):
 
     dc_devices = []
     for page in device_router.pagingMethodCall('getDevices', uid=uid, keys=['uid'], sort='name', dir='ASC'):
+        if not page['result']['success']:
+            print('getdcdevices - getDevices - {} = {}'.format(uid, response))
+            continue
         page_devices = page['result']['devices']
         for d in page_devices:
             if d['uid'].startswith('{}/devices/'.format(uid)):
@@ -150,6 +165,9 @@ def get_dcdevices(routers, uid):
         if 'devices' not in devices_data:
             devices_data['devices'] = {}
         response = device_router.callMethod('getInfo', uid=device)
+        if not response['result']['success']:
+            print('getdcdevices - getInfo - {} = {}'.format(device, response))
+            continue
         data = response['result']['data']
 
         device_id = data['id']
@@ -198,10 +216,10 @@ def get_alldevices(routers, output, full_data):
         if not dc_name:
             continue
 
-        '''
-        if not dc_name.startswith('/Google'):
+
+        if dc_name != '/Server/Windows/SNMP':
             continue
-        '''
+
 
         desc = 'Device Class ({})'.format(dc_name)
         dc_loop.set_description(desc)
@@ -233,17 +251,7 @@ def get_alldevices(routers, output, full_data):
     return
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='List devices')
-    parser.add_argument('-s', dest='environ', action='store', default='z6_test')
-    parser.add_argument('-f', dest='output', action='store', default='devices_output.yaml')
-    # TODO: options to skip groups, systems, location
-    # TODO: option to filter by Device Class
-    # parser.add_argument('-skip', dest='output', action='store', default='devices_output.yaml')
-    options = parser.parse_args()
-    environ = options.environ
-    output = options.output
-
+def export(environ, output):
     device_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='DeviceRouter')
     properties_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='PropertiesRouter')
 
@@ -251,14 +259,6 @@ if __name__ == '__main__':
         'Device': device_router,
         'Properties': properties_router,
     }
-
-    '''
-    response = properties_router.callMethod('query', uid='zport/dmd/Devices/Network/Switch',
-                                            constraints={'idPrefix': 'z'})
-    data = [p for p in response['result']['data'] if p['id'] == 'zDeviceTemplates']
-    print(data)
-    exit()
-    '''
 
     # TODO: dump into file after each file or device class. Keep all data in one place and dump (write, not append)
     #  after each iteration ?
@@ -268,3 +268,17 @@ if __name__ == '__main__':
     get_locations(routers, output, data)
     get_alldevices(routers, output, data)
 
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='List devices')
+    parser.add_argument('-s', dest='environ', action='store', default='z6_test')
+    parser.add_argument('-f', dest='output', action='store', default='devices_output.yaml')
+    # TODO: options to skip groups, systems, location
+    # TODO: option to filter by Device Class
+    # TODO: option to list a single device
+    # parser.add_argument('-skip', dest='output', action='store', default='devices_output_password_TEST.yaml')
+    options = parser.parse_args()
+    environ = options.environ
+    output = options.output
+
+    export(environ, output)

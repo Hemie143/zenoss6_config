@@ -41,3 +41,5 @@ if __name__ == '__main__':
     yaml_print(key='users')
     parse_userlist(routers)
 
+# TODO: stops before end (does not read whole list of users)
+# TODO: export to file option

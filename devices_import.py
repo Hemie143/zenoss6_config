@@ -181,6 +181,8 @@ def add_device(routers, dc_uid, device_data, collectors, devices_fulllist, key):
                                                             zProperty=k, value=v['value'])
                     if not response['result']['success']:
                         print(response)
+                        print('uid: {}'.format(uid))
+                        print('zprop: {} = {}'.format(k, v['value']))
                         exit()
 
 
@@ -196,6 +198,7 @@ def add_device(routers, dc_uid, device_data, collectors, devices_fulllist, key):
         if response['result']['success']:
             zprop_data = response['result']['data']
             for k, v in device_zprop.items():
+                print(k)
                 current_prop = [p for p in zprop_data if p['id'] == k][0]
                 # print(current_prop)
                 # print(current_prop['value'])
@@ -214,6 +217,8 @@ def add_device(routers, dc_uid, device_data, collectors, devices_fulllist, key):
                                                             zProperty=k, value=v)
                     if not response['result']['success']:
                         print(response)
+                        print('uid: {}'.format(uid))
+                        print('zprop: {} = {}'.format(k, v['value']))
                         exit()
                 elif not (current_prop['islocal'] and current_prop['uid'] == device_uid):
                     valuemap = {'lines': [], 'boolean': None, 'int': 0, 'float': 0.0, 'string': None}
@@ -223,10 +228,14 @@ def add_device(routers, dc_uid, device_data, collectors, devices_fulllist, key):
                                                             value=nullvalue)
                     if not response['result']['success']:
                         print(response)
+                        print('uid: {}'.format(uid))
+                        print('zprop: {} = {}'.format(k, v['value']))
                         exit()
                     response = properties_router.callMethod('setZenProperty', uid=device_uid, zProperty=k, value=v)
                     if not response['result']['success']:
                         print(response)
+                        print('uid: {}'.format(uid))
+                        print('zprop: {} = {}'.format(k, v['value']))
                         exit()
 
 
@@ -289,8 +298,10 @@ def import_properties(routers, uid, new_data, key):
                                                     label=v.get('label', ''),
                                                     uid=uid,
                                                     type=v.get('type', 'string'))
-            if response['result']['success']:
+            if not response['result']['success']:
                 print(response)
+                print('k:{} - value:{} - uid:{} - type:{}'.format(k, v.get('value', ''), uid, v.get('type', 'string')))
+                print(current_prop_data)
                 exit()
 
     # zProperties
@@ -320,18 +331,25 @@ def import_properties(routers, uid, new_data, key):
                 response = properties_router.callMethod('setZenProperty', uid=uid, zProperty=k, value=v)
                 if not response['result']['success']:
                     print(response)
+                    print('uid: {}'.format(uid))
+                    print('zprop: {} = {}'.format(k, v['value']))
                     exit()
             if not current_prop[0]['islocal']:
-                valuemap = {'lines': [], 'boolean': None, 'int': None, 'float': None, 'string': None,
-                            'password': None}
+                valuemap = {'lines': [], 'boolean': None, 'int': 1, 'float': 1.0, 'string': '',
+                            'password': ''}
                 nullvalue = valuemap[current_prop[0]['type']]
                 response = properties_router.callMethod('setZenProperty', uid=uid, zProperty=k, value=nullvalue)
                 if not response['result']['success']:
                     print(response)
+                    print('uid: {}'.format(uid))
+                    print('zprop: {} = {}'.format(k, v))
+                    print('nullvalue: {}'.format(nullvalue))
                     exit()
                 response = properties_router.callMethod('setZenProperty', uid=uid, zProperty=k, value=v)
                 if not response['result']['success']:
                     print(response)
+                    print('uid: {}'.format(uid))
+                    print('zprop: {} = {}'.format(k, v))
                     exit()
     return
 

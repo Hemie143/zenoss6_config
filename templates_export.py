@@ -75,6 +75,7 @@ def get_datasources(routers, uid):
     '''
 
     # TODO : commandTemplate not collected ?
+    # TODO: Some fields are not exported, especially for custom types
     ds_fields = OrderedDict([('type', None), ('enabled', True), ('plugin_classname', None), ('component', ''),
                              ('eventClass', ''), ('eventKey', ''), ('severity', 3), ('cycletime', 300), ('oid', None),
                              ('commandTemplate', None), ('usessh', False), ('parser', 'Auto'),
@@ -104,6 +105,9 @@ def get_datasources(routers, uid):
                              ('script', None)
                              ])
 
+    ds_exclude = ['id', 'uid', 'newId', 'name', 'availableParsers', 'source', 'inspector_type', 'meta_type',
+                  'availableStrategies']
+
     '''
     [
     ('xpath', None), ('isrow', None), ('leaf', None), ('xpath_query', None), ('handler', None), 
@@ -124,16 +128,22 @@ def get_datasources(routers, uid):
     for ds in ds_data:
         ds_uid = ds['uid']
         response = template_router.callMethod('getDataSourceDetails', uid=ds_uid)
+        if 'record' not in response['result']:
+            print('getDataSourceDetails: {}'.format(response))
+            continue
         ds_details = response['result']['record']
-        ds_keys = ds_details.keys()
-        ds_keys.remove('name')
+
+        # ds_keys = ds_details.keys()
+        # ds_keys.remove('name')
         ds_name = ds['name']
         datasource_json['datasources'][ds_name] = {}
-        for k, default in ds_fields.items():
-            v = ds_details.get(k, None)
-            if k in ds_keys:
-                ds_keys.remove(k)
-            if v and v != default:
+
+        for k, v in ds_details.items():
+            # v = ds_details.get(k, None)
+            if k in ds_exclude:
+                continue
+            def_value = ds_fields.get(k, None)
+            if v is not None and v != def_value:
                 datasource_json['datasources'][ds_name][k] = v
         if 'usessh' in ds_details:
             datasource_json['datasources'][ds_name]['usessh'] = ds_details['usessh']
@@ -149,7 +159,7 @@ def get_datasources(routers, uid):
         if (v and not v.startswith('ZenPacks.')):
             ds_type = ds_details['type']
             # TODO: Refactor with mapping
-            if ds_type in ['SNMP', 'Cisco SNMP']:
+            if ds_type in ['SNMP', 'Cisco SNMP', 'NetAppMonitor SNMP']:
                 datasource_json['datasources'][ds_name]['oid'] = v
             elif ds_type == 'SQL':
                 datasource_json['datasources'][ds_name]['sql'] = v
@@ -165,6 +175,10 @@ def get_datasources(routers, uid):
                 datasource_json['datasources'][ds_name]['hostname'] = v
             elif ds_type == 'Calculated Performance':
                 datasource_json['datasources'][ds_name]['expression'] = v
+            elif ds_type == 'NetAppMonitor ZAPI':
+                datasource_json['datasources'][ds_name]['zapicall'] = v
+            elif ds_type == 'NetAppMonitor Cmode Events ZAPI':
+                datasource_json['datasources'][ds_name]['source'] = v
             elif ds_type == 'JMX':
                 if v != '${dev/id}':
                     print(ds_type)
@@ -172,11 +186,13 @@ def get_datasources(routers, uid):
                     print(ds)
                     exit()
                 # No data for output
-            elif ds_type in ['Google Cloud Platform Quota']:
+            elif ds_type in ['Google Cloud Platform Quota', 'Power']:
                 datasource_json['datasources'][ds_name]['source'] = v
             elif ds_type in ['Kubernetes Metrics', 'Cisco APIC Properties', 'Cisco APIC Stats', 'LDAPMonitor',
                              'Windows Process', 'VMware vSphere', 'Property', 'PING', 'Kubernetes Calculated Metrics',
-                             'Google Cloud Platform Status', 'Google Cloud Platform Stackdriver Monitoring']:
+                             'Google Cloud Platform Status', 'Google Cloud Platform Stackdriver Monitoring',
+                             'AzureDataSource', 'Azure Metric', 'Azure Activity Log', 'AzureEABillingDataSource',
+                             'Datapoint Aggregator', 'Cisco UCS XML API', 'UCS CIMC']:
                 pass
                 # No data for output
             else:
@@ -207,33 +223,37 @@ def get_datasources(routers, uid):
                     datasource_json['datasources'][ds_name]['datapoints'][dp_name][k] = v
 
             dp_keys.remove('aliases')
-            dp_aliases = dp.get('aliases', [])
+            EXPORT_ALIAS = False
+            if EXPORT_ALIAS:
+                dp_aliases = dp.get('aliases', [])
 
-            # aliases: [{id: "test", formula: "1, *"}, {id: "test2", formula: "2, *"}]
+                # aliases: [{id: "test", formula: "1, *"}, {id: "test2", formula: "2, *"}]
 
-            aliases_yaml = []
-            for alias in dp_aliases:
-                alias_formula = alias.get('formula', 'null')
-                if not alias_formula:
-                    alias_formula = 'null'
-                # aliases_text.append("{}: '{}'".format(alias['name'], alias_formula))
-                aliases_yaml.append({'id': alias['name'], 'formula': alias['formula']})
-            '''
-            if aliases_text:
-                value = '{{{}}}'.format(', '.join(aliases_text)).encode('ascii')
-                datasource_json['datasources'][ds_name]['datapoints'][dp_name]['aliases'] = value
-            '''
-            if aliases_yaml:
-                datasource_json['datasources'][ds_name]['datapoints'][dp_name]['aliases'] = aliases_yaml
-            # dp_all_fields.update(dp_keys)
+                aliases_yaml = []
+                for alias in dp_aliases:
+                    alias_formula = alias.get('formula', 'null')
+                    if not alias_formula:
+                        alias_formula = 'null'
+                    # aliases_text.append("{}: '{}'".format(alias['name'], alias_formula))
+                    aliases_yaml.append({'id': alias['name'], 'formula': alias['formula']})
+                '''
+                if aliases_text:
+                    value = '{{{}}}'.format(', '.join(aliases_text)).encode('ascii')
+                    datasource_json['datasources'][ds_name]['datapoints'][dp_name]['aliases'] = value
+                '''
+                if aliases_yaml:
+                    datasource_json['datasources'][ds_name]['datapoints'][dp_name]['aliases'] = aliases_yaml
+                # dp_all_fields.update(dp_keys)
     return datasource_json
 
 
 def get_thresholds(routers, uid):
+    # TODO: thresholds: "enabled: false" is not exported
     template_router = routers['Template']
     response = template_router.callMethod('getThresholds', uid=uid)
     if not response['result']['success']:
         print('get_thresholds error: {}'.format(response))
+        return {}
     th_data = response['result']['data']
 
     threshold_json = {}
@@ -278,6 +298,7 @@ def get_thresholds(routers, uid):
             v = threshold.get(k, '')
             if k in th_keys:
                 th_keys.remove(k)
+            # TODO: BUG: For enabled field, the value can be "False". In this case, it won't be exported.
             if v and v != default:
                 # yaml_print(key=k, value=v, indent=indent + 4)
                 threshold_json['thresholds'][threshold_name][k] = v
@@ -414,6 +435,7 @@ def fetch_all_templates(template_router, dc_filter=None, t_filter=None):
     filterpath = '/zport/dmd/Devices{}'.format(dc_filter)
     # for t in tqdm(result, ascii=True):
     for t in tqdm(result):
+        # print(t['uid'])
         if t['name'] in templates_name_set:
             continue
         if t_filter and not re.match(t_filter, t['name']):
@@ -421,6 +443,7 @@ def fetch_all_templates(template_router, dc_filter=None, t_filter=None):
         templates_name_set.add(t['name'])
         t_response = template_router.callMethod('getTemplates', id=t['uid'])
         t_result = t_response['result']
+        # print(t_result)
         templates_uid_set.update({r['uid'] for r in t_result if r['uid'].startswith(filterpath)})
     templates_uid = sorted(list(templates_uid_set))
     print('Retrieved {} templates'.format(len(templates_uid)))
@@ -576,3 +599,4 @@ if __name__ == '__main__':
 # TODO: migrate to Python3
 # TODO: Re-order output (no group of local templates at the end)
 # TODO: Stream JSON output on-the-fly ?
+# TODO: Resume an export (based on previous run?)

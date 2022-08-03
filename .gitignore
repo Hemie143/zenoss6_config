@@ -112,3 +112,6 @@ ENV/
 /xlsx
 /yaml
 *.yaml
+/upgrades
+/log
+/cloud

@@ -53,6 +53,7 @@ def get_mappings(routers, uid):
         mapping_id = mapping['id']
         mapping_json['mappings'][mapping_id] = {}
         response = eventclass_router.callMethod('getInstanceData', uid=mapping['uid'])
+        # TODO: check response
         mapping_data = response['result']['data'][0]
         for k in fields:
             v = mapping_data[k]
@@ -63,29 +64,35 @@ def get_mappings(routers, uid):
     return mapping_json
 
 
-def list_eventclasses(routers, uid='/zport/dmd/Events'):
+def list_eventclasses(routers, recursive, uid='/zport/dmd/Events'):
     eventclass_router = routers['EventClasses']
     eventclass_uids = []
     response = eventclass_router.callMethod('asyncGetTree', id=uid)
     result = response['result']
-    for branch in sorted(result, key=lambda i: i['uid']):
-        branch_uid = branch['uid']
-        eventclass_uids.append(branch_uid)
-        branch_children = sorted(branch.get('children', []))
-        if not branch_children:
-            response = eventclass_router.callMethod('asyncGetTree', id=branch_uid)
-            branch_children = response['result']
-        for child in sorted(branch_children, key=lambda i: i['uid']):
-            eventclass_uids.append(child['uid'])
-            children = list_eventclasses(routers, uid=child['uid'])
-            eventclass_uids.extend(children)
+    eventclass_uids.append(uid)
+    if recursive:
+        # print(uid)
+        # print(response)
+        # print(result)
+        for branch in sorted(result, key=lambda i: i['uid']):
+            branch_uid = branch['uid']
+            eventclass_uids.append(branch_uid)
+            branch_children = sorted(branch.get('children', []))
+            if not branch_children:
+                response = eventclass_router.callMethod('asyncGetTree', id=branch_uid)
+                branch_children = response['result']
+            for child in sorted(branch_children, key=lambda i: i['uid']):
+                eventclass_uids.append(child['uid'])
+                children = list_eventclasses(routers, recursive, uid=child['uid'])
+                eventclass_uids.extend(children)
     return eventclass_uids
 
 
-def parse_eventclasses(routers, output):
+def parse_eventclasses(routers, event_class, recursive, output):
 
     print('Retrieving all event classes')
-    eventclasses_list = list_eventclasses(routers)
+    uid = '/zport/dmd/Events{}'.format(event_class)
+    eventclasses_list = list_eventclasses(routers, recursive, uid)
     print('Retrieved {} event classes'.format(len(eventclasses_list)))
 
     eventclass_data = {'event_classes': {}}
@@ -115,9 +122,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='List event classes definition')
     parser.add_argument('-s', dest='environ', action='store', default='z6_test')
     parser.add_argument('-f', dest='output', action='store', default='eventclasses_output.yaml')
+    parser.add_argument('-e', dest='ec', action='store', default='')
+    parser.add_argument('-r', dest='recursive', action='store_true', default='')
     options = parser.parse_args()
     environ = options.environ
     output = options.output
+    event_class = options.ec
+    recursive = options.recursive
 
     print('Connecting to Zenoss')
     try:
@@ -132,4 +143,5 @@ if __name__ == '__main__':
         'Properties': properties_router,
     }
 
-    parse_eventclasses(routers, output)
+    parse_eventclasses(routers, event_class, recursive, output)
+    # TODO: Resume export when previous one has failed ???

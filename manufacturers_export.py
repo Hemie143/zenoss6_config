@@ -8,6 +8,8 @@ from tqdm import tqdm
 def get_manufacturerdata(routers, uid):
     manufacturer_router = routers['Manufacturers']
     response = manufacturer_router.callMethod('getManufacturerData', uid=uid)
+    if not response['result']['success']:
+        print('get_manufacturerdata - {} = {}'.format(uid, response))
     data = response['result']['data'][0]
     fields = ['phone', 'url', 'address1', 'address2', 'city', 'state', 'zip', 'country', 'regexes']
     data_json = {}

@@ -20,6 +20,9 @@ def import_datasource(routers, device_class, template_uid, datasource, ds_data):
                                               templateUid=template_uid)
         if not response['result']['success']:
             print(response)
+            print('name: {}'.format(datasource))
+            print('type: {}'.format(ds_data['type']))
+            print('templateUid: {}'.format(template_uid))
             exit()
 
     # Change properties
@@ -83,6 +86,7 @@ def import_datasource(routers, device_class, template_uid, datasource, ds_data):
 def import_threshold(routers, device_class, template_uid, threshold, th_data):
     template_router = routers['Template']
 
+    '''
     response = template_router.callMethod('getDataPoints', uid=template_uid)
     if not response['result']['success']:
         print(response)
@@ -93,14 +97,28 @@ def import_threshold(routers, device_class, template_uid, threshold, th_data):
         r = re.match('{}/datasources/(.*)/datapoints/(.*)'.format(template_uid), x['uid'])
         if r:
             dp_maps['{}_{}'.format(r.group(1), r.group(2))] = x['uid']
+    '''
 
     th_uid = '{}/thresholds/{}'.format(template_uid, threshold)
-    response = template_router.callMethod('objectExists', uid=th_uid)
-    if not response['result']['success']:
+    # response = template_router.callMethod('objectExists', uid=th_uid)
+    response = template_router.callMethod('getThresholdDetails', uid=th_uid)
+    if not response['result']:
         print(response)
         exit()
-    # TODO: if threshold exists but with a different type, it should be deleted first
-    if not response['result']['exists']:
+    result = response['result']
+
+    # Check whether threshold exists
+    add_threshold = False
+    if 'msg' in result and (result['msg'].startswith('ObjectNotFoundException') or result['msg'].startswith('AttributeError')):
+        add_threshold = True
+    # TODO: The threshold isn't always removed ?
+    # If threshold exists but with a different type, it should be deleted first !
+    if 'record' in result and result['record']['type'] != th_data.get('type', 'MinMaxThreshold'):
+        response = template_router.callMethod('removeThreshold', uid=th_uid)
+        add_threshold = True
+
+    # Add threshold
+    if add_threshold:
         th_type = th_data.get('type', 'MinMaxThreshold')
         response = template_router.callMethod('addThreshold', uid=template_uid, thresholdId=threshold,
                                               thresholdType=th_type, dataPoints=[])
@@ -111,6 +129,10 @@ def import_threshold(routers, device_class, template_uid, threshold, th_data):
     # Change properties
     # response = template_router.callMethod('getDataSources', uid=template_uid)
     response = template_router.callMethod('getThresholdDetails', uid=th_uid)
+    if 'record' not in response['result']:
+        print(response)
+        print('uid: {}'.format(th_uid))
+        exit()
     current_data = response['result']['record']
     new_info = {}
     for k, new_value in th_data.items():
@@ -293,12 +315,16 @@ def create_template(routers, dc_uid, template_id):
     template_router = routers['Template']
     if 'devices' in dc_uid:
         response = template_router.callMethod('makeLocalRRDTemplate', templateName=template_id, uid=dc_uid)
+        # TODO: check if success
+        # TODO: check if object not found, in that case, skip
+        if not response['result']['success'] and response['result']['msg'].startswith('ObjectNotFoundException'):
+            return False
     else:
         response = template_router.callMethod('addTemplate', id=template_id, targetUid=dc_uid)
     if not response['result']['success']:
         print(response)
         exit()
-    return
+    return True
 
 
 def import_template(routers, device_class, template, template_data):
@@ -330,8 +356,9 @@ def import_template(routers, device_class, template, template_data):
         print(response)
         exit()
     if not response['result']['exists']:
-        # print('create_template')
-        create_template(routers, dc_uid, template)
+        check = create_template(routers, dc_uid, template)
+        if not check:
+            return
 
     # Properties
     response = template_router.callMethod('getInfo', uid=template_uid)
@@ -369,6 +396,50 @@ def import_template(routers, device_class, template, template_data):
         graphs = template_data['graphs']
         for graph, gr_data in graphs.items():
             import_graph(routers, device_class, template_uid, graph, gr_data)
+
+        '''
+        # Manage sequences
+
+        # TemplateRouter, getGraphs, uid
+        # TemplateRouter, setGraphDefinitionSequence, uids[]
+        # Get current sequence
+        print('Current')
+        response = template_router.callMethod('getGraphs', uid=template_uid)
+        current_graphs_data = response['result']
+        current_graphs_order = {g['id']:g['sequence'] for g in current_graphs_data}
+        print(current_graphs_order)
+        current_graphs_order = sorted(current_graphs_order.items(), key=lambda x: x[1])
+        current_graphs_order = [i[0] for i in current_graphs_order]
+        print(current_graphs_order)
+
+        # Read sequence from YAML file
+        # gp_uid = '{}/graphPoints/{}'.format(gr_uid, gp)
+        # config_gp = gr_data['graphpoints']
+        # config_gp_ids = config_gp.keys()
+        print('Config')
+        config_graphs_order = {k:v['sequence'] for k,v in graphs.items() if 'sequence' in v}
+        print(config_graphs_order)
+
+        config_graphs_order = sorted(config_graphs_order.items(), key=lambda x: x[1])
+        config_graphs_order = [i[0] for i in config_graphs_order]
+        for id in graphs.keys():
+            if id not in config_graphs_order:
+                config_graphs_order.append(id)
+
+        print(config_graphs_order)
+        print(current_graphs_order)
+
+
+        # If required, correct sequence
+        if not config_graphs_order == current_graphs_order:
+            uids = ['{}/graphDefs/{}'.format(template_uid, id) for id in config_graphs_order]
+            print(uids)
+            exit()
+            response = template_router.callMethod('setGraphPointSequence', uids=uids)
+            if not response['result']['success']:
+                print(response)
+                exit()
+        '''
 
     return
 
@@ -419,3 +490,4 @@ if __name__ == '__main__':
     # yaml_print(key='device_classes', indent=0)
     print('Connecting to Zenoss')
     parse_templates(routers, filename)
+
