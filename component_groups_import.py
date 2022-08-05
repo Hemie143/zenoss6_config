@@ -1,6 +1,9 @@
 import zenAPI.zenApiLib
 import argparse
+import re
 import yaml
+import sys
+from tqdm import tqdm
 
 def parse_branch(routers, uid, data):
     device_router = routers['Device']
@@ -19,6 +22,12 @@ def parse_branch(routers, uid, data):
         data["componentgroups"].update({path: []})
         # TODO: replace with list comprehension ?
         data["componentgroups"][path] = [c['uid'] for c in components]
+        '''
+        for comp in components:
+            # print(comp['uid'])
+            data["componentgroups"][path].append(comp['uid'])
+            # pass
+        '''
 
 
 def parse_tree(routers, id, cg_data):
@@ -28,7 +37,6 @@ def parse_tree(routers, id, cg_data):
     root = response['result'][0]
     for child in root['children']:
         print(child['uid'])
-        # I don't expect any component directly under the root level
         parse_branch(routers, child['uid'], cg_data)
 
 def get_component_groups(routers, output, full_data):
@@ -56,3 +64,4 @@ if __name__ == '__main__':
 
     data = {}
     get_component_groups(routers, output, data)
+
