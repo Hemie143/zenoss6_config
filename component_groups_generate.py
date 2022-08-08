@@ -47,7 +47,7 @@ def parse_component_groups(routers, inputfile):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Import Component Groups')
+    parser = argparse.ArgumentParser(description='Generate Component Groups')
     parser.add_argument('-s', dest='environ', action='store', default='z6_test')
     parser.add_argument('-f', dest='input', action='store', default='component_groups_input.yaml')
     options = parser.parse_args()
@@ -64,4 +64,6 @@ if __name__ == '__main__':
         'Properties': properties_router,
     }
 
+    # TODO: This tool should generate and fill in component groups, based on rules. This is to add components that are
+    # being replaced by a similar component with a different uid (regularly seen in K8s environments, for example). 
     parse_component_groups(routers, inputfile)

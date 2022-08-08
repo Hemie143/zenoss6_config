@@ -13,12 +13,12 @@ def parse_branch(routers, uid, data):
     if len(response['result']) == 0:
         start = len('/zport/dmd/ComponentGroups')
         path = uid[start:]
+        # TODO: should use pagingMethod
         response = component_groups_router.callMethod('getComponents', uid=uid, dir="ASC", params={},
                                                       sort="name", keys=["uid", "device"])
         components = response['result']['data']
         data["componentgroups"].update({path: []})
-        # TODO: replace with list comprehension ?
-        data["componentgroups"][path] = [c['uid'] for c in components]
+        data["componentgroups"][path] = sorted([c['uid'] for c in components])
 
 
 def parse_tree(routers, id, cg_data):
@@ -37,7 +37,7 @@ def get_component_groups(routers, output, full_data):
     yaml.safe_dump(full_data, file(output, 'w'), encoding='utf-8', allow_unicode=True)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='List devices')
+    parser = argparse.ArgumentParser(description='Export Component Groups')
     parser.add_argument('-s', dest='environ', action='store', default='z6_test')
     parser.add_argument('-f', dest='output', action='store', default='component_groups_output.yaml')
     options = parser.parse_args()
