@@ -1,25 +1,24 @@
 import zenAPI.zenApiLib
 import argparse
-from tools import yaml_print
+import logging
 import yaml
 from tqdm import tqdm
 
 
-def parse_triggerlist(routers, output):
+def parse_triggerlist(routers, output, progress_disable):
     trigger_router = routers['Triggers']
     response = trigger_router.callMethod('getTriggers')
-    # print(response)
     triggers = response['result']['data']
-    # yaml_print(key='triggers', indent=0)
 
     triggers = sorted(triggers, key=lambda i: i['name'])
 
     triggers_json = {}
-    for trigger in tqdm(triggers, desc='Triggers     ', ascii=True):
+    for trigger in tqdm(triggers, desc='Triggers     ', ascii=True, disable=progress_disable):
         if 'triggers' not in triggers_json:
             triggers_json['triggers'] = {}
         trigger_name = trigger['name']
         triggers_json['triggers'][trigger_name] = {}
+        # TODO: If enabled=false, it is not exported
         for k in ['enabled']:
             v = trigger.get(k, '')
             if v:
@@ -31,7 +30,7 @@ def parse_triggerlist(routers, output):
             triggers_json['triggers'][trigger_name]['rule']['type'] = trigger_rule['type']
     yaml.safe_dump(triggers_json, file(output, 'w'), encoding='utf-8', allow_unicode=True, sort_keys=True)
 
-def parse_notificationlist(routers, output):
+def parse_notificationlist(routers, output, progress_disable):
     trigger_router = routers['Triggers']
     response = trigger_router.callMethod('getNotifications')
     notifications = response['result']['data']
@@ -43,7 +42,7 @@ def parse_notificationlist(routers, output):
                       'skipfails', 'email_from', 'host', 'port', 'useTls', 'user', 'password']
 
     notification_json = {}
-    for notification in tqdm(notifications, desc='Notifications', ascii=True):
+    for notification in tqdm(notifications, desc='Notifications', ascii=True, disable=progress_disable):
         if 'notifications' not in notification_json:
             notification_json['notifications'] = {}
         notification_name = notification['name']
@@ -78,6 +77,23 @@ def parse_notificationlist(routers, output):
             notification_json['notifications'][notification_name]['recipients'] = recipient_list
     yaml.safe_dump(notification_json, file(output, 'a'), encoding='utf-8', allow_unicode=True, sort_keys=True)
 
+def export(environ, output, progress_disable=False, device_class='', template_name=''):
+    # Routers
+    try:
+        trigger_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='TriggersRouter')
+        properties_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='PropertiesRouter')
+    except Exception as e:
+        logging.error('Could not connect to Zenoss: {}'.format(e.args))
+        exit(1)
+
+    routers = {
+        'Triggers': trigger_router,
+        'Properties': properties_router,
+    }
+
+    parse_triggerlist(routers, output, progress_disable)
+    parse_notificationlist(routers, output, progress_disable)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Manage Triggers')
@@ -87,20 +103,4 @@ if __name__ == '__main__':
     environ = options.environ
     output = options.output
 
-    # Routers
-    try:
-        trigger_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='TriggersRouter')
-        properties_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='PropertiesRouter')
-    except Exception as e:
-        print('Could not connect to Zenoss: {}'.format(e.args))
-        exit(1)
-
-    routers = {
-        'Triggers': trigger_router,
-        'Properties': properties_router,
-    }
-
-    print('Connecting to Zenoss')
-    parse_triggerlist(routers, output)
-    parse_notificationlist(routers, output)
-    #TODO : Export Notification schedules
+    export(environ, output)

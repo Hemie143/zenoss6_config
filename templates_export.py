@@ -31,7 +31,7 @@ def get_datasources(routers, uid):
     template_router = routers['Template']
     response = template_router.callMethod('getDataSources', uid=uid)
     if not response['result']['success']:
-        print('ERROR getDataSources: {}'.format(response))
+        logging.error('ERROR getDataSources- uid: {} - response: {}'.format(uid, response))
         return {}
     ds_data = response['result']['data']
 
@@ -41,7 +41,7 @@ def get_datasources(routers, uid):
 
     response = template_router.callMethod('getDataPoints', uid=uid)
     if not response['result']['success']:
-        print('ERROR getDataPoints: {}'.format(response))
+        logging.error('getDataPoints- uid: {} - response:{}'.format(uid, response))
         return datasource_json
     dp_data = response['result']['data']
 
@@ -148,17 +148,12 @@ def get_datasources(routers, uid):
         if 'usessh' in ds_details:
             datasource_json['datasources'][ds_name]['usessh'] = ds_details['usessh']
 
-        '''
-        if 'Dns' in ds_details['type']:
-            print(ds_details)
-        '''
-
         # Source field
         v = ds_details.get('source', None)
         # if v and v != ds.get('plugin_classname', None):
         if (v and not v.startswith('ZenPacks.')):
             ds_type = ds_details['type']
-            # TODO: Refactor with mapping
+            # TODO: Refactor with mapping or store special Datasource types in config file ??
             if ds_type in ['SNMP', 'Cisco SNMP', 'NetAppMonitor SNMP']:
                 datasource_json['datasources'][ds_name]['oid'] = v
             elif ds_type == 'SQL':
@@ -181,10 +176,8 @@ def get_datasources(routers, uid):
                 datasource_json['datasources'][ds_name]['source'] = v
             elif ds_type == 'JMX':
                 if v != '${dev/id}':
-                    print(ds_type)
-                    print('source: {}'.format(v))
-                    print(ds)
-                    exit()
+                    logging.error('get_datasources - ds_type: {} - source: {} - ds: {}'.format(ds_type, v, ds))
+                    exit(1)
                 # No data for output
             elif ds_type in ['Google Cloud Platform Quota', 'Power']:
                 datasource_json['datasources'][ds_name]['source'] = v
@@ -196,13 +189,9 @@ def get_datasources(routers, uid):
                 pass
                 # No data for output
             else:
-                print()
-                print('Datasource - unknown type')
-                print(ds_type)
-                print('source: {}'.format(v))
-                print(ds)
-                print(ds_details)
-                exit()
+                logging.error('get_datasources - unknown type: {} - source: {} - ds: {} - ds_details: {}'.format(
+                    ds_type, v, ds, ds_details))
+                exit(1)
         # ds_all_fields.update(ds_keys)
 
         # Datapoints
@@ -252,19 +241,13 @@ def get_thresholds(routers, uid):
     template_router = routers['Template']
     response = template_router.callMethod('getThresholds', uid=uid)
     if not response['result']['success']:
-        print('get_thresholds error: {}'.format(response))
+        logging.error('get_thresholds error: uid={} - {}'.format(uid, response))
         return {}
     th_data = response['result']['data']
 
     threshold_json = {}
     if not th_data:
         return threshold_json
-
-    # print(th_data)
-
-    # for t in th_data:
-    #     print(t['uid'])
-
 
     '''
     [
@@ -287,12 +270,10 @@ def get_thresholds(routers, uid):
 
     th_data = sorted(th_data, key=lambda i: i['name'])
     threshold_json['thresholds'] = {}
-    # yaml_print(key='thresholds', indent=indent)
     for threshold in th_data:
         th_keys = threshold.keys()
         th_keys.remove('name')
         threshold_name = threshold['name']
-        # yaml_print(key=threshold['name'], indent=indent + 2)
         threshold_json['thresholds'][threshold_name] = {}
         for k, default in th_fields.items():
             v = threshold.get(k, '')
@@ -313,22 +294,12 @@ def get_thresholds(routers, uid):
             # threshold_json['thresholds'][threshold_name]['dsnames2'] = dsnames
         # th_all_fields.update(th_keys)
 
-    # print(threshold_json)
-
-
     return threshold_json
 
 
 def get_graphs(routers, uid):
     template_router = routers['Template']
     response = template_router.callMethod('getGraphs', uid=uid)
-    '''
-    print(response)
-    if not response['result']['success']:
-        print("Could not find graphs for {}".format(uid))
-        print(response)
-        exit(1)
-    '''
     result = response['result']
 
     graph_json = {}
@@ -365,7 +336,7 @@ def get_graphs(routers, uid):
     try:
         gr_data = sorted(result, key=lambda i: i['name'])           # TODO: May crash in some cases, to debug
     except Exception as e:
-        print('ERROR gr_data: {}'.format(e.args))
+        logging.error('ERROR: {} - result: {}'.format(e.args, result))
         gr_data = []
     # dp_data = sorted(dp_data, key=lambda i: i['name'])
     for graph in gr_data:
@@ -404,6 +375,9 @@ def get_graphs(routers, uid):
 def get_template(routers, uid):
     template_router = routers['Template']
     response = template_router.callMethod('getInfo', uid=uid)
+    if not 'data' in response['result']:
+        logging.error('get_template - getInfo did not succeed - response: {}'.format(response))
+        return {}
     data = response['result']['data']
     fields = ['description', 'targetPythonClass']
 
@@ -423,30 +397,30 @@ def get_template(routers, uid):
     template_json[template_name].update(graphs)
     return template_json
 
-def fetch_all_templates(template_router, dc_filter=None, t_filter=None):
+def fetch_all_templates(template_router, dc_filter=None, t_filter=None, progress_disable=False):
     # Generate full set of template uids, down to local component templates
-    print('Retrieving templates')
+    logging.info('Retrieving templates')
     templates_name_set = set()
     templates_uid_set = set()
 
     response = template_router.callMethod('getTemplates', id='/zport/dmd/Devices')
     result = response['result']
-    print('Found {} root entries for templates'.format(len(result)))
+    logging.info('Found {} root entries for templates'.format(len(result)))
     filterpath = '/zport/dmd/Devices{}'.format(dc_filter)
-    # for t in tqdm(result, ascii=True):
-    for t in tqdm(result):
-        # print(t['uid'])
+    for t in tqdm(result, disable=progress_disable):
         if t['name'] in templates_name_set:
             continue
         if t_filter and not re.match(t_filter, t['name']):
             continue
         templates_name_set.add(t['name'])
         t_response = template_router.callMethod('getTemplates', id=t['uid'])
+        if not t_response['result']:
+            logging.error('ERROR getTemplates- id: {} - response: {}'.format(t['uid'], response))
+            continue
         t_result = t_response['result']
-        # print(t_result)
-        templates_uid_set.update({r['uid'] for r in t_result if r['uid'].startswith(filterpath)})
+        templates_uid_set.update({r['uid'] for r in t_result if 'uid' in r and r['uid'].startswith(filterpath)})
     templates_uid = sorted(list(templates_uid_set))
-    print('Retrieved {} templates'.format(len(templates_uid)))
+    logging.info('Retrieved {} templates'.format(len(templates_uid)))
     return templates_uid
 
 def group_templates_by_dc(dc_templates, templates_uid):
@@ -461,7 +435,7 @@ def group_templates_by_dc(dc_templates, templates_uid):
         uid = dc_templates.pop()
         r = re.match('((\/zport\/dmd\/Devices)(.*))(\/rrdTemplates\/)(.*)', uid)
         if not r:
-            print('No regex match for {}'.format(uid))
+            logging.error('No regex match for {}'.format(uid))
             exit()
         # Retrieve all templates for same device class
         dc_path = '{}{}'.format(r.group(1), r.group(4))
@@ -472,20 +446,21 @@ def group_templates_by_dc(dc_templates, templates_uid):
         templates = set(filter(dc_r.match, templates_uid))
         device_classes[dc_name] = templates
         dc_templates = dc_templates - templates
-    print('Found {} Device classes with templates'.format(len(device_classes)))
+    logging.info('Found {} Device classes with templates'.format(len(device_classes)))
     return device_classes
 
-def export_dc_templates(device_classes, output):
-    dc_loop = tqdm(sorted(device_classes.items()), desc='Device Classes ')
+def export_dc_templates(routers, device_classes, output, progress_disable):
+    dc_loop = tqdm(sorted(device_classes.items()), desc='Device Classes ', disable=progress_disable)
     templates_json = {}
     for device_class, uids in dc_loop:
         dc_loop.set_description('Device Class ({})'.format(device_class))
         dc_loop.refresh()
+        logging.info('Parsing templates in device class {}'.format(device_class))
         if 'device_classes' not in templates_json:
             templates_json['device_classes'] = {}
         templates_json['device_classes'][device_class] = {}
         uids = sorted(uids)
-        t_loop = tqdm(uids, desc='    Templates')
+        t_loop = tqdm(uids, desc='    Templates', disable=progress_disable)
         for uid in t_loop:
             t_loop.set_description('    Template ({})'.format(uid))
             t_loop.refresh()
@@ -498,10 +473,10 @@ def export_dc_templates(device_classes, output):
             except:
                 time.sleep(10)
 
-def export_local_templates(local_templates):
+def export_local_templates(routers, local_templates, output, progress_disable):
     # Local templates
     templates_json = {'device_classes': {}}
-    dt_loop = tqdm(local_templates, desc='Local templates')
+    dt_loop = tqdm(local_templates, desc='Local templates', disable=progress_disable)
     for uid in dt_loop:
         dt_loop.set_description('Local template ({})'.format(uid))
         dt_loop.refresh()
@@ -522,24 +497,42 @@ def export_local_templates(local_templates):
         f.write('# Local templates\r\n')
     yaml.safe_dump(templates_json, file(output, 'a'), encoding='utf-8', allow_unicode=True, sort_keys=True)
 
-def parse_templates(routers, output, dc_filter, template_filter):
+def parse_templates(routers, output, dc_filter, template_filter, progress_disable):
     template_router = routers['Template']
-    templates_uid = fetch_all_templates(template_router, dc_filter, template_filter)
+    templates_uid = fetch_all_templates(template_router, dc_filter, template_filter, progress_disable)
 
     # Sort dc templates from devices/components templates
     dc_templates = set([u for u in templates_uid if '/rrdTemplates/' in u])
     local_templates = [u for u in templates_uid if '/devices/' in u]
-    print('Device Class templates: {}'.format(len(dc_templates)))
-    print('Local templates: {}'.format(len(local_templates)))
+    logging.info('Device Class templates: {}'.format(len(dc_templates)))
+    logging.info('Local templates: {}'.format(len(local_templates)))
 
     if len(templates_uid) != len(dc_templates) + len(local_templates):
-        print('Some templates will not be exported')
+        logging.warning('Some templates will not be exported')
     else:
-        print('Total number of templates is OK')
+        logging.info('Total number of templates is OK')
 
     device_classes = group_templates_by_dc(dc_templates, templates_uid)
-    export_dc_templates(device_classes, output)
-    export_local_templates(local_templates)
+    logging.info('Starting to export templates by device classes')
+    export_dc_templates(routers, device_classes, output, progress_disable)
+    logging.info('Starting to export local templates')
+    export_local_templates(routers, local_templates, output, progress_disable)
+
+def export(environ, output, progress_disable=False, device_class='', template_name=''):
+    try:
+        template_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='TemplateRouter')
+        properties_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='PropertiesRouter')
+    except Exception as e:
+        logging.error('Could not connect to Zenoss: {}'.format(e.args))
+        exit(1)
+
+    routers = {
+        'Template': template_router,
+        'Properties': properties_router,
+    }
+
+    parse_templates(routers, output, device_class, template_name, progress_disable)
+    logging.info('Exiting template export')
 
 
 if __name__ == '__main__':
@@ -555,6 +548,9 @@ if __name__ == '__main__':
     device_class = options.dc
     template_name = options.template_name
 
+    export(environ, output, True, device_class, template_name)
+
+    '''
     log = logging.getLogger('templates_export')
     log.setLevel(logging.DEBUG)
     # File handler
@@ -576,23 +572,8 @@ if __name__ == '__main__':
     log.info('Output file: {}'.format(output))
     log.info('Device Class: {}'.format(device_class))
     log.info('Template name: {}'.format(template_name))
+    '''
 
-    try:
-        template_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='TemplateRouter')
-        properties_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='PropertiesRouter')
-    except Exception as e:
-        log.error('Could not connect to Zenoss: {}'.format(e.args))
-        exit(1)
-
-    routers = {
-        'Template': template_router,
-        'Properties': properties_router,
-    }
-
-    # yaml_print(key='device_classes', indent=0)
-    print('Connecting to Zenoss')
-    parse_templates(routers, output, device_class, template_name)
-    logging.info('Exiting template export')
 
 # TODO: separate outputs: stdout for progress, log for errors and file output
 # TODO: protect all calls

@@ -65,5 +65,5 @@ if __name__ == '__main__':
     }
 
     # TODO: This tool should generate and fill in component groups, based on rules. This is to add components that are
-    # being replaced by a similar component with a different uid (regularly seen in K8s environments, for example). 
+    # being replaced by a similar component with a different uid (regularly seen in K8s environments, for example).
     parse_component_groups(routers, inputfile)

@@ -211,7 +211,7 @@ def add_device(routers, dc_uid, device_data, collectors, devices_fulllist, key):
                     elif current_prop['type'] == 'password':
                         f = Fernet(key)
                         v = f.decrypt(v)
-                        # print(v)
+                        print(v)
 
                     response = properties_router.callMethod('setZenProperty', uid=device_uid,
                                                             zProperty=k, value=v)

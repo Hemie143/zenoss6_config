@@ -1,5 +1,6 @@
 import zenAPI.zenApiLib
 import argparse
+import logging
 import yaml
 import sys
 from tqdm import tqdm
@@ -9,7 +10,8 @@ def get_manufacturerdata(routers, uid):
     manufacturer_router = routers['Manufacturers']
     response = manufacturer_router.callMethod('getManufacturerData', uid=uid)
     if not response['result']['success']:
-        print('get_manufacturerdata - {} = {}'.format(uid, response))
+        logging.error('get_manufacturerdata - {} = {}'.format(uid, response))
+        return {}
     data = response['result']['data'][0]
     fields = ['phone', 'url', 'address1', 'address2', 'city', 'state', 'zip', 'country', 'regexes']
     data_json = {}
@@ -23,16 +25,16 @@ def get_manufacturerdata(routers, uid):
     return data_json
 
 
-def get_manufacturerproducts(routers, uid):
+def get_manufacturerproducts(routers, uid, progress_disable):
     manufacturer_router = routers['Manufacturers']
     response = manufacturer_router.callMethod('getProductsByManufacturer', uid=uid)
     if not response['result']['success']:
-        print('get_manufacturerproducts - Could not get products: {}'.format(response))
+        logging.error('get_manufacturerproducts - Could not get products: {}'.format(response))
         return {}
     data = response['result']['data']
     data = sorted(data, key=lambda i: i['id'])
     products_json = {}
-    for product in tqdm(data, desc='    Products', ascii=True):
+    for product in tqdm(data, desc='    Products', ascii=True, disable=progress_disable):
         if 'products' not in products_json:
             products_json['products'] = {}
         product_id = product['id']
@@ -47,7 +49,7 @@ def get_productdata(routers, uid, name):
     manufacturer_router = routers['Manufacturers']
     response = manufacturer_router.callMethod('getProductData', uid=uid, prodname=name)
     if not response['result']['success']:
-        print('get_productdata - Could not get product data: {}'.format(response))
+        logging.error('get_productdata - Could not get product data - uid: {} - response: {}'.format(uid, response))
         return {}
     data = response['result']['data'][0]
     fields = ['name', 'partno', 'prodKeys', 'desc', 'os', 'type']
@@ -65,17 +67,17 @@ def get_productdata(routers, uid, name):
     return data_json
 
 
-def parse_manufacturerlist(routers, output):
+def parse_manufacturerlist(routers, output, progress_disable):
     manufacturer_router = routers['Manufacturers']
 
-    print('Retrieving all manufacturers')
+    logging.info('Retrieving all manufacturers')
     response = manufacturer_router.callMethod('getManufacturerList')
     data = response['result']['data']
-    print('Retrieving {} manufacturers'.format(len(data)))
+    logging.info('Retrieving {} manufacturers'.format(len(data)))
 
     manufacturers = sorted(data, key=lambda i: i['uid'])
     manufacturer_json = {}
-    man_loop = tqdm(manufacturers, desc='Manufacturers', ascii=True, file=sys.stdout)
+    man_loop = tqdm(manufacturers, desc='Manufacturers', ascii=True, file=sys.stdout, disable=progress_disable)
     for manufacturer in man_loop:
         man_loop.set_description('Manufacturer ({})'.format(manufacturer['path']))
         man_loop.refresh()
@@ -87,10 +89,25 @@ def parse_manufacturerlist(routers, output):
         manufacturer_json['manufacturers'][manufacturer_path] = {}
         man_data = get_manufacturerdata(routers, manufacturer_uid)
         manufacturer_json['manufacturers'][manufacturer_path].update(man_data)
-        man_products = get_manufacturerproducts(routers, manufacturer_uid)
+        man_products = get_manufacturerproducts(routers, manufacturer_uid, progress_disable)
         manufacturer_json['manufacturers'][manufacturer_path].update(man_products)
         yaml.safe_dump(manufacturer_json, file(output, 'w'), encoding='utf-8', allow_unicode=True, sort_keys=True)
 
+def export(environ, output, progress_disable=False):
+    # Routers
+    try:
+        manufacturer_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='ManufacturersRouter')
+        properties_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='PropertiesRouter')
+    except Exception as e:
+        logging.error('Could not connect to Zenoss: {}'.format(e.args))
+        exit(1)
+
+    routers = {
+        'Manufacturers': manufacturer_router,
+        'Properties': properties_router,
+    }
+
+    parse_manufacturerlist(routers, output, progress_disable)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Manage Manufacturers')
@@ -100,18 +117,4 @@ if __name__ == '__main__':
     environ = options.environ
     output = options.output
 
-    # Routers
-    try:
-        manufacturer_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='ManufacturersRouter')
-        properties_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='PropertiesRouter')
-    except Exception as e:
-        print('Could not connect to Zenoss: {}'.format(e.args))
-        exit(1)
-
-    routers = {
-        'Manufacturers': manufacturer_router,
-        'Properties': properties_router,
-    }
-
-    print('Connecting to Zenoss')
-    parse_manufacturerlist(routers, output)
+    export(environ, output)

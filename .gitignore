@@ -115,3 +115,5 @@ ENV/
 /upgrades
 /log
 /cloud
+
+*.bak

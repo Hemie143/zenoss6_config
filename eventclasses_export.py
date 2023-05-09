@@ -1,5 +1,6 @@
 import zenAPI.zenApiLib
 import argparse
+import logging
 import yaml
 from tqdm import tqdm
 
@@ -7,6 +8,9 @@ from tqdm import tqdm
 def get_properties(routers, uid):
     properties_router = routers['Properties']
     response = properties_router.callMethod('getZenProperties', uid=uid)
+    if not response['result']['success']:
+        logging.error('get_properties - getZenProperties - {} = {}'.format(uid, response))
+        exit(1)
     properties = response['result']['data']
     properties = sorted(properties, key=lambda i: i['id'])
     prop_data = {}
@@ -22,7 +26,7 @@ def get_transforms(routers, uid):
     eventclass_router = routers['EventClasses']
     response = eventclass_router.callMethod('getTransformTree', uid=uid)
     if not response['result']['success']:
-        print('get_transforms - response: {}'.format(response))
+        logging.error('get_transforms - response: {}'.format(response))
         return {}
     data = response['result']['data']
     id = uid[10:]
@@ -71,9 +75,6 @@ def list_eventclasses(routers, recursive, uid='/zport/dmd/Events'):
     result = response['result']
     eventclass_uids.append(uid)
     if recursive:
-        # print(uid)
-        # print(response)
-        # print(result)
         for branch in sorted(result, key=lambda i: i['uid']):
             branch_uid = branch['uid']
             eventclass_uids.append(branch_uid)
@@ -88,15 +89,15 @@ def list_eventclasses(routers, recursive, uid='/zport/dmd/Events'):
     return eventclass_uids
 
 
-def parse_eventclasses(routers, event_class, recursive, output):
+def parse_eventclasses(routers, event_class, progress_disable, recursive, output):
 
-    print('Retrieving all event classes')
+    logging.info('Retrieving all event classes')
     uid = '/zport/dmd/Events{}'.format(event_class)
     eventclasses_list = list_eventclasses(routers, recursive, uid)
-    print('Retrieved {} event classes'.format(len(eventclasses_list)))
+    logging.info('Retrieved {} event classes'.format(len(eventclasses_list)))
 
     eventclass_data = {'event_classes': {}}
-    ec_loop = tqdm(eventclasses_list, desc='Event Classes ', ascii=True)
+    ec_loop = tqdm(eventclasses_list, desc='Event Classes ', ascii=True, disable=progress_disable)
     for uid in ec_loop:
         branch_path = uid[10:]
         ec_loop.set_description('Event Class ({})'.format(branch_path))
@@ -118,6 +119,23 @@ def parse_eventclasses(routers, event_class, recursive, output):
             pass
 
 
+def export(environ, output, progress_disable=False, event_class='', recursive=True):
+    logging.info('Connecting to Zenoss')
+    try:
+        eventclass_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='EventClassesRouter')
+        properties_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='PropertiesRouter')
+    except Exception as e:
+        logging.error('Could not connect to Zenoss: {}'.format(e.args))
+        exit(1)
+
+    routers = {
+        'EventClasses': eventclass_router,
+        'Properties': properties_router,
+    }
+
+    parse_eventclasses(routers, event_class, progress_disable, recursive, output)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='List event classes definition')
     parser.add_argument('-s', dest='environ', action='store', default='z6_test')
@@ -130,18 +148,4 @@ if __name__ == '__main__':
     event_class = options.ec
     recursive = options.recursive
 
-    print('Connecting to Zenoss')
-    try:
-        eventclass_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='EventClassesRouter')
-        properties_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='PropertiesRouter')
-    except Exception as e:
-        print('Could not connect to Zenoss: {}'.format(e.args))
-        exit(1)
-
-    routers = {
-        'EventClasses': eventclass_router,
-        'Properties': properties_router,
-    }
-
-    parse_eventclasses(routers, event_class, recursive, output)
-    # TODO: Resume export when previous one has failed ???
+    export(environ, output, True, event_class, recursive)

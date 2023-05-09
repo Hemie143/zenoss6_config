@@ -1,8 +1,9 @@
 # coding=utf-8
 import zenAPI.zenApiLib
 import argparse
-import yaml
+import re
 import sys
+import yaml
 from tqdm import tqdm
 
 
@@ -110,17 +111,27 @@ def import_notification(routers, data, current_notifications):
         response = trigger_router.callMethod('getRecipientOptions')
         result = response['result']
         recipient_options = result['data']
+
         recipients = new_data['recipients']
         current_recipients_label = [r['label'] for r in current_c_data['recipients']]
-        # current_recipients_label = []                 # To reset recipients list
-        # current_c_data['recipients'] = []             # To reset recipients list
         for recipient in recipients:
             for r_value in recipient_options:
                 if r_value['label'] == recipient:
                     recipient_options.remove(r_value)
                     break
             else:
-                r_value = None
+                recipient = recipient.lower()
+                r = re.match(r'^[a-z0-9\-]+[\._]?[a-z0-9]+[@]\w+[.]\w{2,3}$', recipient)
+                if r:
+                    r_value = {
+                        "type": "manual",
+                        "label": recipient,
+                        "value": recipient,
+                        "write": False,
+                        "manage": False
+                    }
+                else:
+                    r_value = None
             if r_value and r_value['label'] not in current_recipients_label:
                 # TODO : preserver the order as in data read from yaml. The value could be insert instead of being appended
                 current_c_data['recipients'].append(r_value)
@@ -144,7 +155,7 @@ def import_notification(routers, data, current_notifications):
                 data_changed = True
     if data_changed:
         response = trigger_router.callMethod('updateNotification', **current_c_data)
-        # print(response)
+        print(response)
     return
 
 def parse_triggerlist(routers, input):

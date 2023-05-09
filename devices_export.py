@@ -26,7 +26,7 @@ def get_properties(routers, uid):
             elif prop['type'] == 'int':
                 v = prop.get('value', None)
             else:
-                print(prop)
+                logging.error('get_properties Error:{}'.format(prop))
                 exit()
             if v:
                 if 'cProperties' not in prop_data:
@@ -65,8 +65,7 @@ def get_properties(routers, uid):
             elif prop['type'] == 'multiconfig':
                 v = prop['value']           # dict ?
             else:
-                print('get_properties - Property of unknown type')
-                print(prop)
+                logging.error('get_properties error - Property of unknown type: {}'.format(prop))
                 exit()
             # v = prop.get('valueAsString', '')
             # What if v is boolean False ?
@@ -78,17 +77,16 @@ def get_properties(routers, uid):
     return prop_data
 
 
-def get_groups(routers, output, full_data):
+def get_groups(routers, output, full_data, progress_disable):
     device_router = routers['Device']
     response = device_router.callMethod('getGroups', uid='/zport/dmd/Devices')
     groups = sorted(response['result']['groups'], key=lambda i: i['name'])
     groups_data = {'groups': {}}
-    for group in tqdm(groups, desc='Groups         ', ascii=True):
+    for group in tqdm(groups, desc='Groups         ', ascii=True, disable=progress_disable):
         g_uid = '/zport/dmd/Groups{}'.format(group['name'])
         response = device_router.callMethod('getInfo', uid=g_uid)
         if not response['result']['success']:
             logging.error('get_groups - getInfo - {} = {}'.format(group['name'], response))
-            # print('get_groups - getInfo - {} = {}'.format(group['name'], response))
             continue
         data = response['result']['data']
         group_name = data['name']
@@ -102,12 +100,12 @@ def get_groups(routers, output, full_data):
     return
 
 
-def get_systems(routers, output, full_data):
+def get_systems(routers, output, full_data, progress_disable):
     device_router = routers['Device']
     response = device_router.callMethod('getSystems', uid='/zport/dmd/Devices')
     systems = sorted(response['result']['systems'], key=lambda i: i['name'])
     systems_data = {'systems': {}}
-    for system in tqdm(systems,desc='Systems        ', ascii=True):
+    for system in tqdm(systems,desc='Systems        ', ascii=True, disable=progress_disable):
         g_uid = '/zport/dmd/Systems{}'.format(system['name'])
         response = device_router.callMethod('getInfo', uid=g_uid)
         data = response['result']['data']
@@ -122,12 +120,12 @@ def get_systems(routers, output, full_data):
     return
 
 
-def get_locations(routers, output, full_data):
+def get_locations(routers, output, full_data, progress_disable):
     device_router = routers['Device']
     response = device_router.callMethod('getLocations', uid='/zport/dmd/Devices')
     locations = sorted(response['result']['locations'], key=lambda i: i['name'])
     locations_data = {'locations': {}}
-    for location in tqdm(locations, desc='Locations      ', ascii=True):
+    for location in tqdm(locations, desc='Locations      ', ascii=True, disable=progress_disable):
         g_uid = '/zport/dmd/Locations{}'.format(location['name'])
         response = device_router.callMethod('getInfo', uid=g_uid)
         data = response['result']['data']
@@ -154,7 +152,7 @@ def get_dcdevices(routers, uid):
     dc_devices = []
     for page in device_router.pagingMethodCall('getDevices', uid=uid, keys=['uid'], sort='name', dir='ASC'):
         if not page['result']['success']:
-            print('getdcdevices - getDevices - {} = {}'.format(uid, response))
+            logging.error('getdcdevices - getDevices - {} = {}'.format(uid, response))
             continue
         page_devices = page['result']['devices']
         for d in page_devices:
@@ -166,7 +164,7 @@ def get_dcdevices(routers, uid):
             devices_data['devices'] = {}
         response = device_router.callMethod('getInfo', uid=device)
         if not response['result']['success']:
-            print('getdcdevices - getInfo - {} = {}'.format(device, response))
+            logging.info('getdcdevices - getInfo - {} = {}'.format(device, response))
             continue
         data = response['result']['data']
 
@@ -192,16 +190,17 @@ def get_dcdevices(routers, uid):
         result = response['result']
         d_templates = []
         for t in result:
-            r = re.match('^(.*) \(.*\)', t['text'])
-            if r:
-                d_templates.append(r.group(1))
+            if 'text' in t:
+                r = re.match('^(.*) \(.*\)', t['text'])
+                if r:
+                    d_templates.append(r.group(1))
         if d_templates:
             d_templates.sort()
             devices_data['devices'][device_id]['templates'] = d_templates
     return devices_data
 
 
-def get_alldevices(routers, output, full_data):
+def get_alldevices(routers, output, full_data, progress_disable):
     device_router = routers['Device']
     response = device_router.callMethod('getDeviceClasses', uid='/zport/dmd/Devices')
     device_classes = sorted(response['result']['deviceClasses'], key=lambda i: i['name'])
@@ -210,16 +209,16 @@ def get_alldevices(routers, output, full_data):
     # with open(output, 'a') as f:
     #     f.write('device_classes:\r\n')
 
-    dc_loop = tqdm(device_classes, desc='Device Class', ascii=True, file=sys.stdout)
+    dc_loop = tqdm(device_classes, desc='Device Class', ascii=True, file=sys.stdout, disable=progress_disable)
     for device_class in dc_loop:
         dc_name = device_class['name']
         if not dc_name:
             continue
 
-
-        if dc_name != '/Server/Windows/SNMP':
+        '''
+        if dc_name < '/Server/Microsoft/Windows/domain_mgt.staging.local':
             continue
-
+        '''
 
         desc = 'Device Class ({})'.format(dc_name)
         dc_loop.set_description(desc)
@@ -251,7 +250,7 @@ def get_alldevices(routers, output, full_data):
     return
 
 
-def export(environ, output):
+def export(environ, output, progress_disable=False):
     device_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='DeviceRouter')
     properties_router = zenAPI.zenApiLib.zenConnector(section=environ, routerName='PropertiesRouter')
 
@@ -263,10 +262,10 @@ def export(environ, output):
     # TODO: dump into file after each file or device class. Keep all data in one place and dump (write, not append)
     #  after each iteration ?
     data = {}
-    get_groups(routers, output, data)
-    get_systems(routers, output, data)
-    get_locations(routers, output, data)
-    get_alldevices(routers, output, data)
+    get_groups(routers, output, data, progress_disable)
+    get_systems(routers, output, data, progress_disable)
+    get_locations(routers, output, data, progress_disable)
+    get_alldevices(routers, output, data, progress_disable)
 
 
 if __name__ == '__main__':
