@@ -63,7 +63,9 @@ def get_properties(routers, uid):
             elif prop['type'] == 'multilinethreshold':
                 v = prop['value']           # dict ?
             elif prop['type'] == 'multiconfig':
-                v = prop['value']           # dict ?
+                v = prop['value']  # dict ?
+            elif prop['type'] == 'multilinetaggrouping':
+                v = prop['value']  # dict ?
             else:
                 logging.error('get_properties error - Property of unknown type: {}'.format(prop))
                 exit()
